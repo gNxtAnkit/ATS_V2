@@ -30,6 +30,8 @@ class TenantUserRecord:
     status: str
     password_hash: str | None
     email_verified_at: datetime | None
+    last_login_at: datetime | None
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -80,7 +82,7 @@ class TenantIdentityRepository:
             text(
                 """
                 SELECT tenant_id, id, email::text AS email, display_name, status,
-                       password_hash, email_verified_at
+                       password_hash, email_verified_at, last_login_at, created_at
                 FROM tenant.users
                 WHERE email = :email AND status = 'active' AND deleted_at IS NULL
                 """
@@ -98,7 +100,7 @@ class TenantIdentityRepository:
             text(
                 """
                 SELECT tenant_id, id, email::text AS email, display_name, status,
-                       password_hash, email_verified_at
+                       password_hash, email_verified_at, last_login_at, created_at
                 FROM tenant.users
                 WHERE email = :email AND deleted_at IS NULL
                 """
@@ -200,7 +202,7 @@ class TenantIdentityRepository:
             text(
                 """
                 SELECT tenant_id, id, email::text AS email, display_name, status,
-                       password_hash, email_verified_at
+                       password_hash, email_verified_at, last_login_at, created_at
                 FROM tenant.users
                 WHERE tenant_id = :tenant_id
                   AND email = :email
@@ -217,7 +219,7 @@ class TenantIdentityRepository:
             text(
                 """
                 SELECT tenant_id, id, email::text AS email, display_name, status,
-                       password_hash, email_verified_at
+                       password_hash, email_verified_at, last_login_at, created_at
                 FROM tenant.users
                 WHERE tenant_id = :tenant_id
                   AND id = :user_id
@@ -321,6 +323,21 @@ class TenantIdentityRepository:
             },
         ).one()
         return row.id
+
+    def get_latest_session_ip(self, tenant_id: UUID, user_id: UUID) -> str | None:
+        row = self._session.execute(
+            text(
+                """
+                SELECT host(ip_address) AS ip_address
+                FROM tenant.user_sessions
+                WHERE tenant_id = :tenant_id AND user_id = :user_id AND ip_address IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": tenant_id, "user_id": user_id},
+        ).mappings().one_or_none()
+        return row["ip_address"] if row else None
 
     def get_active_session_by_hash(self, session_token_hash: str) -> SessionRecord | None:
         row = self._session.execute(

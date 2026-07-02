@@ -41,13 +41,14 @@ export function MfaSetupQrPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { realm } = useAuthSession();
-  const setup = location.state as TotpSetupResponse | null;
+  const setup = location.state as (TotpSetupResponse & { returnTo?: string }) | null;
   const [code, setCode] = useState('');
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState('Incorrect code. Please check your app and try again.');
   const [showSecret, setShowSecret] = useState(false);
   const provisioningUri = setup?.provisioning_uri ?? '';
   const manualSecret = setup?.manual_entry_secret ?? '';
+  const returnTo = setup?.returnTo;
   const setupPath = realm === 'platform' ? '/platform-admin/security/mfa/setup' : '/settings/security/mfa/setup';
   const recoveryCodesPath = realm === 'platform' ? '/platform-admin/security/mfa/recovery-codes' : '/settings/security/mfa/recovery-codes';
 
@@ -57,7 +58,7 @@ export function MfaSetupQrPage() {
     setState('loading');
     try {
       const response = await identityApi.confirmMfaSetup(realm, code);
-      navigate(recoveryCodesPath, { state: { recoveryCodes: response.recovery_codes } });
+      navigate(recoveryCodesPath, { state: { recoveryCodes: response.recovery_codes, returnTo } });
     } catch (err) {
       const safeError = toSafeError(err, 'mfa');
       setState('error');
@@ -73,7 +74,7 @@ export function MfaSetupQrPage() {
           <Alert variant="warning" className="mb-5">
             MFA setup has not been started. Return to the previous step to generate a new setup code.
           </Alert>
-          <Button fullWidth size="lg" onClick={() => navigate(setupPath)}>
+          <Button fullWidth size="lg" onClick={() => navigate(setupPath, { state: { returnTo } })}>
             Start setup again
           </Button>
         </div>
@@ -167,7 +168,7 @@ export function MfaSetupQrPage() {
                       type="button"
                       variant="secondary"
                       fullWidth
-                      onClick={() => navigate(setupPath)}
+                      onClick={() => navigate(setupPath, { state: { returnTo } })}
                     >
                       Cancel setup
                     </Button>

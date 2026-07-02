@@ -68,4 +68,12 @@ export const identityApi = {
     httpClient.post<TotpSetupResponse>(`${basePath(realm)}/mfa/totp/setup`, undefined, { authRealm: realm }),
   confirmMfaSetup: (realm: AuthRealm, code: string) =>
     httpClient.post<TotpConfirmResponse>(`${basePath(realm)}/mfa/totp/confirm`, { code }, { authRealm: realm }),
+  changePassword: (realm: AuthRealm, currentPassword: string, newPassword: string, confirmPassword: string) =>
+    httpClient.post<MessageResponse>(`${basePath(realm)}/auth/change-password`, {
+      current_password: currentPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    }, { authRealm: realm }),
+  disableMfa: (realm: AuthRealm, password: string) =>
+    httpClient.post<MessageResponse>(`${basePath(realm)}/mfa/disable`, { password }, { authRealm: realm }),
 };

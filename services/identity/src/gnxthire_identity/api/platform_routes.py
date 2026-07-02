@@ -99,6 +99,7 @@ def logout(
 def me(authenticated=Depends(require_platform_admin)) -> MeResponse:
     user, repository, _settings = authenticated
     mfa_factor = repository.get_primary_totp_factor(user.id)
+    last_login_ip = repository.get_latest_session_ip(user.id)
     return MeResponse(
         actor_id=user.id,
         actor_type="platform_admin",
@@ -107,6 +108,10 @@ def me(authenticated=Depends(require_platform_admin)) -> MeResponse:
         display_name=user.display_name,
         email_verified=user.email_verified_at is not None,
         mfa_enabled=mfa_factor is not None,
+        status=user.status,
+        created_at=user.created_at,
+        last_login_at=user.last_login_at,
+        last_login_ip=last_login_ip,
     )
 
 

@@ -16,6 +16,7 @@ import { MfaSetupIntroPage } from './features/mfa/MfaSetupIntroPage';
 import { MfaSetupQrPage } from './features/mfa/MfaSetupQrPage';
 import { MfaRecoveryCodesPage } from './features/mfa/MfaRecoveryCodesPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { AdminProfilePage } from './pages/Admin';
 
 export default function App() {
   return (
@@ -40,10 +41,12 @@ export default function App() {
 
         {/* App shell — authenticated routes */}
         <Route path="/dashboard" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
+        <Route path="/settings/profile" element={<ProtectedRoute realm="tenant"><AdminProfilePage /></ProtectedRoute>} />
         <Route path="/settings/security/mfa/setup" element={<ProtectedRoute realm="tenant"><MfaSetupIntroPage /></ProtectedRoute>} />
         <Route path="/settings/security/mfa/setup/qr" element={<ProtectedRoute realm="tenant"><MfaSetupQrPage /></ProtectedRoute>} />
         <Route path="/settings/security/mfa/recovery-codes" element={<ProtectedRoute realm="tenant"><MfaRecoveryCodesPage /></ProtectedRoute>} />
         <Route path="/platform-admin/dashboard" element={<ProtectedRoute realm="platform"><DashboardPage /></ProtectedRoute>} />
+        <Route path="/platform-admin/profile" element={<ProtectedRoute realm="platform"><AdminProfilePage /></ProtectedRoute>} />
         <Route path="/platform-admin/security/mfa/setup" element={<ProtectedRoute realm="platform"><MfaSetupIntroPage /></ProtectedRoute>} />
         <Route path="/platform-admin/security/mfa/setup/qr" element={<ProtectedRoute realm="platform"><MfaSetupQrPage /></ProtectedRoute>} />
         <Route path="/platform-admin/security/mfa/recovery-codes" element={<ProtectedRoute realm="platform"><MfaRecoveryCodesPage /></ProtectedRoute>} />

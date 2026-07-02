@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AppShell } from '../../components/layout/AppShell';
 import { Button } from '../../components/ui/Button';
 import { Alert } from '../../components/ui/Alert';
@@ -33,9 +33,11 @@ const steps = [
 
 export function MfaSetupIntroPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { realm } = useAuthSession();
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState('');
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
   const setupQrPath = realm === 'platform' ? '/platform-admin/security/mfa/setup/qr' : '/settings/security/mfa/setup/qr';
   const dashboardPath = realm === 'platform' ? '/platform-admin/dashboard' : '/dashboard';
 
@@ -45,7 +47,7 @@ export function MfaSetupIntroPage() {
     setError('');
     try {
       const setup = await identityApi.startMfaSetup(realm);
-      navigate(setupQrPath, { state: setup });
+      navigate(setupQrPath, { state: { ...setup, returnTo } });
     } catch (err) {
       setState('error');
       setError(toSafeError(err).message);
@@ -116,7 +118,7 @@ export function MfaSetupIntroPage() {
             Start setup
             <ArrowRight size={16} />
           </Button>
-          <Button variant="secondary" size="lg" onClick={() => navigate(dashboardPath)}>
+          <Button variant="secondary" size="lg" onClick={() => navigate(returnTo ?? dashboardPath)}>
             Maybe later
           </Button>
         </div>

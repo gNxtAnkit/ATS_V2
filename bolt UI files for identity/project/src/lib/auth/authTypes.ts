@@ -21,6 +21,10 @@ export interface CurrentUser {
   display_name: string;
   email_verified: boolean;
   mfa_enabled: boolean;
+  status: string;
+  created_at: string;
+  last_login_at: string | null;
+  last_login_ip: string | null;
 }
 
 export interface StoredSession {

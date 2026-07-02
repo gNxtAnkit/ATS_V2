@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -81,6 +82,10 @@ class MeResponse(BaseModel):
     display_name: str
     email_verified: bool
     mfa_enabled: bool
+    status: str
+    created_at: datetime
+    last_login_at: datetime | None = None
+    last_login_ip: str | None = None
 
 
 class MessageResponse(BaseModel):

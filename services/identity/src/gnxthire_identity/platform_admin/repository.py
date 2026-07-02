@@ -223,6 +223,21 @@ class PlatformAdminRepository:
         ).one()
         return row.id
 
+    def get_latest_session_ip(self, platform_user_id: UUID) -> str | None:
+        row = self._session.execute(
+            text(
+                """
+                SELECT host(ip_address) AS ip_address
+                FROM platform.platform_user_sessions
+                WHERE platform_user_id = :platform_user_id AND ip_address IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"platform_user_id": platform_user_id},
+        ).mappings().one_or_none()
+        return row["ip_address"] if row else None
+
     def get_active_session_by_hash(self, session_token_hash: str) -> PlatformSessionRecord | None:
         row = self._session.execute(
             text(

@@ -9,11 +9,14 @@ import { useAuthSession } from '../../lib/auth/authSession';
 export function MfaRecoveryCodesPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { realm } = useAuthSession();
-  const recoveryCodes = ((location.state as { recoveryCodes?: string[] } | null)?.recoveryCodes ?? []);
+  const { realm, refreshCurrentSession } = useAuthSession();
+  const locationState = location.state as { recoveryCodes?: string[]; returnTo?: string } | null;
+  const recoveryCodes = locationState?.recoveryCodes ?? [];
+  const returnTo = locationState?.returnTo;
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(recoveryCodes.join('\n')).then(() => {
@@ -72,8 +75,8 @@ export function MfaRecoveryCodesPage() {
               Your account is now protected with multi-factor authentication. You'll need your authenticator
               app every time you sign in.
             </p>
-            <Button fullWidth size="lg" onClick={() => navigate(dashboardPath, { replace: true })}>
-              Go to dashboard
+            <Button fullWidth size="lg" onClick={() => navigate(returnTo ?? dashboardPath, { replace: true })}>
+              {returnTo ? 'Back to profile' : 'Go to dashboard'}
             </Button>
           </div>
         </div>
@@ -153,7 +156,16 @@ export function MfaRecoveryCodesPage() {
           fullWidth
           size="lg"
           disabled={!actionsTaken}
-          onClick={() => setConfirmed(true)}
+          loading={refreshing}
+          onClick={async () => {
+            setRefreshing(true);
+            try {
+              await refreshCurrentSession();
+            } finally {
+              setRefreshing(false);
+              setConfirmed(true);
+            }
+          }}
         >
           <CheckCircle2 size={16} />
           I have saved my recovery codes

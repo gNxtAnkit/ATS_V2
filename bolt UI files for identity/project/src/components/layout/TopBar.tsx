@@ -114,7 +114,7 @@ function ProfileMenu() {
           </div>
           <div className="py-1">
             <button
-              onClick={() => setOpen(false)}
+              onClick={() => { setOpen(false); navigate(realm === 'platform' ? '/platform-admin/profile' : '/settings/profile'); }}
               className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <User size={13} className="text-slate-400 shrink-0" />
