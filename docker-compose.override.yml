@@ -1,0 +1,15 @@
+services:
+  postgres:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+  redpanda:
+    restart: unless-stopped
+
+  opensearch:
+    restart: unless-stopped
+
+  mailpit:
+    restart: unless-stopped
