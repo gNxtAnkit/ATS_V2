@@ -26,6 +26,10 @@ class LoginResponse(BaseModel):
     status: str
     tokens: TokenPair | None = None
     mfa_challenge_token: str | None = None
+    mfa_required: bool = False
+    challenge_token: str | None = None
+    available_methods: list[str] = Field(default_factory=list)
+    expires_in_seconds: int | None = None
 
 
 class RefreshRequest(BaseModel):
@@ -73,6 +77,10 @@ class DisableMfaRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class RegenerateRecoveryCodesRequest(BaseModel):
+    password: str = Field(min_length=1)
+
+
 class MeResponse(BaseModel):
     actor_id: UUID
     actor_type: str
@@ -81,6 +89,9 @@ class MeResponse(BaseModel):
     display_name: str
     email_verified: bool
     mfa_enabled: bool
+    mfa_methods: list[str] = Field(default_factory=list)
+    pending_mfa_setup: bool = False
+    recovery_codes_remaining: int = 0
 
 
 class MessageResponse(BaseModel):

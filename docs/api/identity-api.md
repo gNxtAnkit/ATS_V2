@@ -28,6 +28,50 @@ resolution/duplicate-handling rule).
 - `POST /mfa/recovery-codes/regenerate`
 - `POST /mfa/disable`
 
+### MFA login responses
+
+Password-only login with no active MFA factor returns `status="authenticated"` and a normal
+`tokens` object.
+
+Password login with active MFA returns no normal tokens:
+
+```json
+{
+  "status": "mfa_required",
+  "mfa_required": true,
+  "mfa_challenge_token": "short-lived-token",
+  "challenge_token": "short-lived-token",
+  "available_methods": ["totp", "recovery_code"],
+  "expires_in_seconds": 300,
+  "tokens": null
+}
+```
+
+Successful `/mfa/totp/verify` or `/mfa/recovery-code/verify` returns the normal authenticated
+login response with access and refresh tokens. Challenge tokens are not access tokens and are
+rejected by `/auth/me` and other authenticated APIs.
+
+`GET /auth/me` includes MFA state for the frontend:
+
+```json
+{
+  "actor_id": "...",
+  "actor_type": "tenant_user",
+  "tenant_id": "...",
+  "email": "user@example.com",
+  "display_name": "User",
+  "email_verified": true,
+  "mfa_enabled": true,
+  "mfa_methods": ["totp"],
+  "pending_mfa_setup": false,
+  "recovery_codes_remaining": 8
+}
+```
+
+`POST /mfa/recovery-codes/regenerate` and `POST /mfa/disable` require the current password.
+Setup returns a conflict when MFA is already enabled; disable and recovery-code regeneration
+return a conflict when MFA is not enabled.
+
 ## Platform-admin endpoints -- base path `/v1/identity/platform-admin`
 
 Login body is `{"email": "...", "password": "..."}` only, checked against

@@ -15,6 +15,8 @@ the full separation rationale.
 - Email verification flow with SMTP email delivery and single-use HMAC-stored tokens.
 - Password change (requires current password, revokes other sessions).
 - TOTP MFA setup, confirmation, challenge verification, recovery-code regeneration, and disable.
+  Setup is separate from enabled state; login never returns normal tokens before MFA
+  verification when an active factor exists.
 - Refresh token persistence/rotation through `tenant.user_sessions`.
 - Tenant security event writes through `tenant.security_events`.
 - Failed-login tracking and automatic account lockout (see `IDENTITY_LOGIN_LOCKOUT_*` settings).
@@ -63,7 +65,8 @@ without duplication.
 python -m uvicorn gnxthire_identity.main:app --reload --port 8001
 ```
 
-Mailpit/Mailhog local SMTP defaults are in `.env.example`.
+Mailpit/Mailhog local SMTP defaults are in `.env.example`. For Gmail on port 587 use
+`SMTP_USE_TLS=true` and `SMTP_USE_SSL=false`; implicit SSL is for port 465-style SMTP only.
 
 ## Documentation
 

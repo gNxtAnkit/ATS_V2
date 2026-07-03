@@ -25,7 +25,7 @@ from gnxthire_common.migrations import assert_required_schema_files
 
 SCHEMA_DIRECTORY = REPOSITORY_ROOT / "db" / "schema"
 ALEMBIC_INI = REPOSITORY_ROOT / "alembic.ini"
-EXPECTED_ALEMBIC_HEAD = "0002_platform_admin_identity"
+EXPECTED_ALEMBIC_HEAD = "0003_platform_admin_perms"
 EXPECTED_SCHEMAS = {
     "app",
     "platform",

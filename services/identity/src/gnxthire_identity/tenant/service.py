@@ -36,7 +36,12 @@ from gnxthire_identity.security import (
     verify_signed_token,
     verify_totp_code,
 )
-from gnxthire_identity.tenant.repository import TenantIdentityRepository, TenantRecord, TenantUserRecord
+from gnxthire_identity.tenant.repository import (
+    PENDING_TOTP_SECRET_PREFIX,
+    TenantIdentityRepository,
+    TenantRecord,
+    TenantUserRecord,
+)
 
 
 class TenantIdentityService:
@@ -75,11 +80,18 @@ class TenantIdentityService:
         if mfa_factor is not None:
             challenge = self._create_mfa_challenge(user)
             self._write_event(user.tenant_id, user.id, "login_success", "success", metadata, {"mfa_required": True})
-            return LoginResponse(status="mfa_required", mfa_challenge_token=challenge)
+            return LoginResponse(
+                status="mfa_required",
+                mfa_required=True,
+                mfa_challenge_token=challenge,
+                challenge_token=challenge,
+                available_methods=self._available_mfa_methods(user.tenant_id, user.id),
+                expires_in_seconds=self._settings.mfa_challenge_expires_minutes * 60,
+            )
         tokens = self._issue_session_tokens(user, metadata, mfa_verified=False)
         self._repository.update_last_login(user.tenant_id, user.id)
         self._write_event(user.tenant_id, user.id, "login_success", "success", metadata)
-        return LoginResponse(status="authenticated", tokens=tokens)
+        return LoginResponse(status="authenticated", tokens=tokens, mfa_required=False)
 
     def refresh(self, *, refresh_token: str, metadata: RequestMetadata) -> TokenPair:
         self._rate_limiter.hit(f"{metadata.ip_address}:refresh", TOKEN_RATE_LIMIT)
@@ -228,6 +240,8 @@ class TenantIdentityService:
         return MessageResponse(message="Email verified")
 
     def setup_totp(self, *, user: TenantUserRecord, metadata: RequestMetadata) -> tuple[str, str]:
+        if self._repository.get_primary_totp_factor(user.tenant_id, user.id) is not None:
+            raise ConflictError("MFA is already enabled", safe_detail="MFA is already enabled for this account.")
         secret = generate_totp_secret()
         encrypted_secret = encrypt_secret(secret, self._settings.mfa_secret_encryption_key.get_secret_value())
         self._repository.create_pending_totp_factor(user.tenant_id, user.id, encrypted_secret)
@@ -245,7 +259,8 @@ class TenantIdentityService:
         factor = self._repository.get_pending_totp_factor(user.tenant_id, user.id)
         if factor is None or factor.secret_ref is None:
             raise ConflictError("No pending MFA setup", safe_detail="No pending MFA setup")
-        secret = decrypt_secret(factor.secret_ref, self._settings.mfa_secret_encryption_key.get_secret_value())
+        encrypted_secret = self._pending_secret_ref_to_encrypted_secret(factor.secret_ref)
+        secret = decrypt_secret(encrypted_secret, self._settings.mfa_secret_encryption_key.get_secret_value())
         if not verify_totp_code(
             secret=secret,
             code=code,
@@ -259,7 +274,7 @@ class TenantIdentityService:
             self._settings.mfa_recovery_code_count,
             self._settings.mfa_recovery_code_length,
         )
-        self._repository.enable_mfa_factor(factor.id)
+        self._repository.enable_mfa_factor(factor.id, encrypted_secret)
         self._repository.replace_recovery_codes(
             user.tenant_id,
             user.id,
@@ -284,6 +299,7 @@ class TenantIdentityService:
         user = self._repository.get_tenant_user_by_id(tenant_id, user_id)
         if user is None:
             raise AuthenticationError("Invalid MFA challenge", safe_detail="Invalid MFA challenge")
+        self._ensure_user_can_authenticate(user)
         factor = self._repository.get_primary_totp_factor(tenant_id, user_id)
         verified = False
         if factor is not None and factor.secret_ref is not None:
@@ -306,9 +322,13 @@ class TenantIdentityService:
         tokens = self._issue_session_tokens(user, metadata, mfa_verified=True)
         self._repository.update_last_login(user.tenant_id, user.id)
         self._write_event(user.tenant_id, user.id, "login_success", "success", metadata, {"mfa_verified": True})
-        return LoginResponse(status="authenticated", tokens=tokens)
+        return LoginResponse(status="authenticated", tokens=tokens, mfa_required=False)
 
-    def regenerate_recovery_codes(self, *, user: TenantUserRecord, metadata: RequestMetadata) -> list[str]:
+    def regenerate_recovery_codes(self, *, user: TenantUserRecord, password: str, metadata: RequestMetadata) -> list[str]:
+        if not verify_password(password, user.password_hash):
+            raise AuthenticationError("Invalid credentials", safe_detail="Invalid credentials")
+        if self._repository.get_primary_totp_factor(user.tenant_id, user.id) is None:
+            raise ConflictError("MFA is not enabled", safe_detail="MFA is not enabled for this account.")
         codes = generate_recovery_codes(
             self._settings.mfa_recovery_code_count,
             self._settings.mfa_recovery_code_length,
@@ -324,6 +344,8 @@ class TenantIdentityService:
     def disable_mfa(self, *, user: TenantUserRecord, password: str, metadata: RequestMetadata) -> MessageResponse:
         if not verify_password(password, user.password_hash):
             raise AuthenticationError("Invalid credentials", safe_detail="Invalid credentials")
+        if self._repository.get_primary_totp_factor(user.tenant_id, user.id) is None:
+            raise ConflictError("MFA is not enabled", safe_detail="MFA is not enabled for this account.")
         self._repository.disable_mfa(user.tenant_id, user.id)
         self._email_sender.send(mfa_disabled_email(user.email))
         self._write_event(user.tenant_id, user.id, "mfa_disabled", "success", metadata)
@@ -470,6 +492,17 @@ class TenantIdentityService:
             ),
             self._settings.mfa_challenge_secret.get_secret_value(),
         )
+
+    def _available_mfa_methods(self, tenant_id: UUID, user_id: UUID) -> list[str]:
+        methods = ["totp"]
+        if self._repository.count_active_recovery_codes(tenant_id, user_id) > 0:
+            methods.append("recovery_code")
+        return methods
+
+    def _pending_secret_ref_to_encrypted_secret(self, secret_ref: str) -> str:
+        if not secret_ref.startswith(PENDING_TOTP_SECRET_PREFIX):
+            raise ConflictError("No pending MFA setup", safe_detail="No pending MFA setup")
+        return secret_ref.removeprefix(PENDING_TOTP_SECRET_PREFIX)
 
     def _write_event(
         self,

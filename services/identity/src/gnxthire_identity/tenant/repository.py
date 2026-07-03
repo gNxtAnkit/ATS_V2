@@ -12,6 +12,7 @@ from gnxthire_common.context import ActorType
 from gnxthire_common.rls import set_tenant_context
 
 SYSTEM_ACTOR_ID = UUID("00000000-0000-0000-0000-000000000000")
+PENDING_TOTP_SECRET_PREFIX = "pending:"
 
 
 @dataclass(frozen=True)
@@ -435,7 +436,10 @@ class TenantIdentityRepository:
                 """
                 UPDATE tenant.user_mfa_factors
                 SET disabled_at = COALESCE(disabled_at, now())
-                WHERE tenant_id = :tenant_id AND user_id = :user_id AND method = 'totp'
+                WHERE tenant_id = :tenant_id
+                  AND user_id = :user_id
+                  AND method = 'totp'
+                  AND secret_ref LIKE 'pending:%'
                 """
             ),
             {"tenant_id": tenant_id, "user_id": user_id},
@@ -449,7 +453,7 @@ class TenantIdentityRepository:
                 VALUES (:tenant_id, :user_id, 'totp', :secret_ref, true, now())
                 """
             ),
-            {"tenant_id": tenant_id, "user_id": user_id, "secret_ref": encrypted_secret},
+            {"tenant_id": tenant_id, "user_id": user_id, "secret_ref": f"{PENDING_TOTP_SECRET_PREFIX}{encrypted_secret}"},
         )
 
     def get_pending_totp_factor(self, tenant_id: UUID, user_id: UUID) -> MfaFactorRecord | None:
@@ -463,6 +467,7 @@ class TenantIdentityRepository:
                   AND method = 'totp'
                   AND is_primary
                   AND disabled_at IS NOT NULL
+                  AND secret_ref LIKE 'pending:%'
                 ORDER BY created_at DESC
                 LIMIT 1
                 """
@@ -471,10 +476,16 @@ class TenantIdentityRepository:
         ).mappings().one_or_none()
         return MfaFactorRecord(**row) if row else None
 
-    def enable_mfa_factor(self, factor_id: UUID) -> None:
+    def enable_mfa_factor(self, factor_id: UUID, encrypted_secret: str) -> None:
         self._session.execute(
-            text("UPDATE tenant.user_mfa_factors SET disabled_at = NULL WHERE id = :factor_id"),
-            {"factor_id": factor_id},
+            text(
+                """
+                UPDATE tenant.user_mfa_factors
+                SET disabled_at = NULL, secret_ref = :secret_ref
+                WHERE id = :factor_id
+                """
+            ),
+            {"factor_id": factor_id, "secret_ref": encrypted_secret},
         )
 
     def replace_recovery_codes(self, tenant_id: UUID, user_id: UUID, code_hashes: list[str]) -> None:
@@ -516,6 +527,22 @@ class TenantIdentityRepository:
             {"tenant_id": tenant_id, "user_id": user_id, "code_hash": code_hash},
         ).one_or_none()
         return row is not None
+
+    def count_active_recovery_codes(self, tenant_id: UUID, user_id: UUID) -> int:
+        row = self._session.execute(
+            text(
+                """
+                SELECT count(*) AS remaining
+                FROM tenant.user_mfa_factors
+                WHERE tenant_id = :tenant_id
+                  AND user_id = :user_id
+                  AND method = 'recovery_code'
+                  AND disabled_at IS NULL
+                """
+            ),
+            {"tenant_id": tenant_id, "user_id": user_id},
+        ).mappings().one()
+        return row["remaining"]
 
     def disable_mfa(self, tenant_id: UUID, user_id: UUID) -> None:
         self._session.execute(

@@ -40,7 +40,7 @@ function CopyButton({ text }: { text: string }) {
 export function MfaSetupQrPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { realm } = useAuthSession();
+  const { realm, refreshCurrentSession } = useAuthSession();
   const setup = location.state as TotpSetupResponse | null;
   const [code, setCode] = useState('');
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -57,6 +57,7 @@ export function MfaSetupQrPage() {
     setState('loading');
     try {
       const response = await identityApi.confirmMfaSetup(realm, code);
+      await refreshCurrentSession();
       navigate(recoveryCodesPath, { state: { recoveryCodes: response.recovery_codes } });
     } catch (err) {
       const safeError = toSafeError(err, 'mfa');

@@ -47,20 +47,6 @@ export default function App() {
         <Route path="/platform-admin/security/mfa/setup" element={<ProtectedRoute realm="platform"><MfaSetupIntroPage /></ProtectedRoute>} />
         <Route path="/platform-admin/security/mfa/setup/qr" element={<ProtectedRoute realm="platform"><MfaSetupQrPage /></ProtectedRoute>} />
         <Route path="/platform-admin/security/mfa/recovery-codes" element={<ProtectedRoute realm="platform"><MfaRecoveryCodesPage /></ProtectedRoute>} />
-        <Route path="/platform-admin/users" element={<ProtectedRoute realm="platform"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/platform-admin/audit" element={<ProtectedRoute realm="platform"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/platform-admin/reports" element={<ProtectedRoute realm="platform"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/platform-admin/help" element={<ProtectedRoute realm="platform"><DashboardPage /></ProtectedRoute>} />
-
-        {/* Placeholder routes to avoid dead links from nav */}
-        <Route path="/jobs" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/candidates" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/pipeline" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/interviews" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/inbox" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/reports" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
-        <Route path="/help" element={<ProtectedRoute realm="tenant"><DashboardPage /></ProtectedRoute>} />
-
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/auth/login" replace />} />
         </Routes>

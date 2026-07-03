@@ -11,6 +11,10 @@ export interface LoginResponse {
   status: 'authenticated' | 'mfa_required' | string;
   tokens: TokenPair | null;
   mfa_challenge_token: string | null;
+  mfa_required?: boolean;
+  challenge_token?: string | null;
+  available_methods?: string[];
+  expires_in_seconds?: number | null;
 }
 
 export interface CurrentUser {
@@ -21,6 +25,9 @@ export interface CurrentUser {
   display_name: string;
   email_verified: boolean;
   mfa_enabled: boolean;
+  mfa_methods: string[];
+  pending_mfa_setup: boolean;
+  recovery_codes_remaining: number;
 }
 
 export interface StoredSession {
@@ -32,4 +39,6 @@ export interface PendingMfaChallenge {
   realm: AuthRealm;
   challengeToken: string;
   redirectTo: string;
+  availableMethods: string[];
+  expiresAt: number;
 }

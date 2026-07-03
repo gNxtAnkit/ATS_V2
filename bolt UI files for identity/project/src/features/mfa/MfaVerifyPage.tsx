@@ -17,6 +17,9 @@ export function MfaVerifyPage() {
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState('Invalid code. Please check your authenticator app and try again.');
   const [countdown, setCountdown] = useState(30);
+  const challenge = getMfaChallenge();
+  const loginPath = challenge?.realm === 'platform' ? '/platform-admin/login' : '/auth/login';
+  const recoveryCodeAvailable = challenge?.availableMethods.includes('recovery_code') ?? false;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -28,10 +31,14 @@ export function MfaVerifyPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (code.length < 6 || state === 'loading') return;
-    const challenge = getMfaChallenge();
     if (!challenge) {
       setState('error');
       setError('Your verification session expired. Please sign in again.');
+      return;
+    }
+    if (challenge.expiresAt <= Date.now()) {
+      clearMfaChallenge();
+      navigate(loginPath, { replace: true });
       return;
     }
     setState('loading');
@@ -104,14 +111,16 @@ export function MfaVerifyPage() {
       </form>
 
       <div className="mt-5 flex flex-col items-center gap-3">
+        {recoveryCodeAvailable && (
+          <Link
+            to="/auth/mfa/recovery-code"
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+          >
+            Use a recovery code instead
+          </Link>
+        )}
         <Link
-          to="/auth/mfa/recovery-code"
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-        >
-          Use a recovery code instead
-        </Link>
-        <Link
-          to="/auth/login"
+          to={loginPath}
           className="text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors"
         >
           ← Back to sign in

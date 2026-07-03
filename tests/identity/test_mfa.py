@@ -80,12 +80,56 @@ def test_totp_confirm_enables_mfa_and_login_then_requires_challenge(
     login = service.login(email=email, password="StrongPassw0rd!", metadata=METADATA)
     assert login.status == "mfa_required"
     assert login.mfa_challenge_token
+    assert login.mfa_required is True
+    assert login.tokens is None
+    assert "totp" in login.available_methods
+    assert "recovery_code" in login.available_methods
 
     completed = service.verify_mfa_challenge(
         challenge_token=login.mfa_challenge_token, code=_current_totp_code(secret), metadata=METADATA
     )
     assert completed.status == "authenticated"
     assert completed.tokens.access_token
+
+
+def test_mfa_challenge_token_cannot_access_authenticated_routes(
+    app_client, seed_tenant, seed_tenant_user, db_engine
+) -> None:
+    tenant_id = seed_tenant()
+    email = seed_tenant_user(tenant_id=tenant_id, password="StrongPassw0rd!")
+    service_session = sessionmaker(bind=db_engine, expire_on_commit=False, future=True)()
+    service = TenantIdentityService(
+        repository=TenantIdentityRepository(service_session),
+        settings=get_identity_settings(),
+        email_sender=CapturingEmailSender(),
+        rate_limiter=MemoryRateLimiter(),
+    )
+    service_session.execute(text("SELECT set_config('app.is_platform_admin', 'true', true)"))
+    user = _get_user(service_session, tenant_id, email)
+    _uri, secret = service.setup_totp(user=user, metadata=METADATA)
+    service.confirm_totp(user=user, code=_current_totp_code(secret), metadata=METADATA)
+    service_session.commit()
+    service_session.close()
+
+    login = app_client.post("/v1/identity/auth/login", json={"email": email, "password": "StrongPassw0rd!"})
+    challenge_token = login.json()["mfa_challenge_token"]
+
+    response = app_client.get("/v1/identity/auth/me", headers={"Authorization": f"Bearer {challenge_token}"})
+
+    assert response.status_code == 401
+
+
+def test_setup_when_mfa_enabled_returns_conflict(tenant_service_and_session, seed_tenant, seed_tenant_user) -> None:
+    service, session = tenant_service_and_session
+    tenant_id = seed_tenant()
+    email = seed_tenant_user(tenant_id=tenant_id, password="StrongPassw0rd!")
+    session.execute(text("SELECT set_config('app.is_platform_admin', 'true', true)"))
+    user = _get_user(session, tenant_id, email)
+    _uri, secret = service.setup_totp(user=user, metadata=METADATA)
+    service.confirm_totp(user=user, code=_current_totp_code(secret), metadata=METADATA)
+
+    with pytest.raises(ConflictError, match="MFA is already enabled"):
+        service.setup_totp(user=user, metadata=METADATA)
 
 
 def test_recovery_code_is_single_use(tenant_service_and_session, seed_tenant, seed_tenant_user) -> None:
@@ -172,6 +216,29 @@ def test_disable_mfa_requires_password(tenant_service_and_session, seed_tenant, 
 
     login = service.login(email=email, password="StrongPassw0rd!", metadata=METADATA)
     assert login.status == "authenticated"
+
+
+def test_regenerate_recovery_codes_requires_enabled_mfa_and_password(
+    tenant_service_and_session, seed_tenant, seed_tenant_user
+) -> None:
+    service, session = tenant_service_and_session
+    tenant_id = seed_tenant()
+    email = seed_tenant_user(tenant_id=tenant_id, password="StrongPassw0rd!")
+    session.execute(text("SELECT set_config('app.is_platform_admin', 'true', true)"))
+    user = _get_user(session, tenant_id, email)
+
+    with pytest.raises(ConflictError, match="MFA is not enabled"):
+        service.regenerate_recovery_codes(user=user, password="StrongPassw0rd!", metadata=METADATA)
+
+    _uri, secret = service.setup_totp(user=user, metadata=METADATA)
+    old_codes = service.confirm_totp(user=user, code=_current_totp_code(secret), metadata=METADATA)
+
+    with pytest.raises(AuthenticationError):
+        service.regenerate_recovery_codes(user=user, password="WrongPassword!", metadata=METADATA)
+
+    new_codes = service.regenerate_recovery_codes(user=user, password="StrongPassw0rd!", metadata=METADATA)
+    assert len(new_codes) == get_identity_settings().mfa_recovery_code_count
+    assert set(new_codes).isdisjoint(old_codes)
 
 
 def test_confirm_without_pending_setup_raises_conflict(

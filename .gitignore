@@ -25,6 +25,8 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+*.npm-cache/
+.npm-cache/
 
 # Logs and local data
 *.log

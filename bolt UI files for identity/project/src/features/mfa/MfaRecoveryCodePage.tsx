@@ -15,14 +15,20 @@ export function MfaRecoveryCodePage() {
   const [code, setCode] = useState('');
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState('Invalid recovery code. Please check your saved codes and try again.');
+  const challenge = getMfaChallenge();
+  const loginPath = challenge?.realm === 'platform' ? '/platform-admin/login' : '/auth/login';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || state === 'loading') return;
-    const challenge = getMfaChallenge();
     if (!challenge) {
       setState('error');
       setError('Your verification session expired. Please sign in again.');
+      return;
+    }
+    if (!challenge.availableMethods.includes('recovery_code') || challenge.expiresAt <= Date.now()) {
+      clearMfaChallenge();
+      navigate(loginPath, { replace: true });
       return;
     }
     setState('loading');
@@ -101,7 +107,7 @@ export function MfaRecoveryCodePage() {
           Use authenticator code instead
         </Link>
         <Link
-          to="/auth/login"
+          to={loginPath}
           className="text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors"
         >
           ← Back to sign in

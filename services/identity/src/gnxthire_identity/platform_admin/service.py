@@ -15,7 +15,11 @@ from gnxthire_identity.email import (
     password_reset_email,
     verification_email,
 )
-from gnxthire_identity.platform_admin.repository import PlatformAdminRepository, PlatformUserRecord
+from gnxthire_identity.platform_admin.repository import (
+    PENDING_TOTP_SECRET_PREFIX,
+    PlatformAdminRepository,
+    PlatformUserRecord,
+)
 from gnxthire_identity.rate_limit import EMAIL_RATE_LIMIT, LOGIN_RATE_LIMIT, MFA_RATE_LIMIT, RateLimiter, TOKEN_RATE_LIMIT
 from gnxthire_identity.request_metadata import RequestMetadata
 from gnxthire_identity.schemas import LoginResponse, MessageResponse, TokenPair
@@ -66,11 +70,18 @@ class PlatformAdminIdentityService:
         if mfa_factor is not None:
             challenge = self._create_mfa_challenge(user)
             self._write_audit(user.id, "platform_admin.login_success", "platform_user", metadata, {"mfa_required": True})
-            return LoginResponse(status="mfa_required", mfa_challenge_token=challenge)
+            return LoginResponse(
+                status="mfa_required",
+                mfa_required=True,
+                mfa_challenge_token=challenge,
+                challenge_token=challenge,
+                available_methods=self._available_mfa_methods(user.id),
+                expires_in_seconds=self._settings.mfa_challenge_expires_minutes * 60,
+            )
         tokens = self._issue_session_tokens(user, metadata, mfa_verified=False)
         self._repository.update_last_login(user.id)
         self._write_audit(user.id, "platform_admin.login_success", "platform_user", metadata)
-        return LoginResponse(status="authenticated", tokens=tokens)
+        return LoginResponse(status="authenticated", tokens=tokens, mfa_required=False)
 
     def refresh(self, *, refresh_token: str, metadata: RequestMetadata) -> TokenPair:
         self._rate_limiter.hit(f"{metadata.ip_address}:platform-admin:refresh", TOKEN_RATE_LIMIT)
@@ -186,6 +197,8 @@ class PlatformAdminIdentityService:
         return MessageResponse(message="Email verified")
 
     def setup_totp(self, *, user: PlatformUserRecord, metadata: RequestMetadata) -> tuple[str, str]:
+        if self._repository.get_primary_totp_factor(user.id) is not None:
+            raise ConflictError("MFA is already enabled", safe_detail="MFA is already enabled for this account.")
         secret = generate_totp_secret()
         encrypted_secret = encrypt_secret(secret, self._settings.mfa_secret_encryption_key.get_secret_value())
         self._repository.create_pending_totp_factor(user.id, encrypted_secret)
@@ -203,7 +216,8 @@ class PlatformAdminIdentityService:
         factor = self._repository.get_pending_totp_factor(user.id)
         if factor is None or factor.secret_ref is None:
             raise ConflictError("No pending MFA setup", safe_detail="No pending MFA setup")
-        secret = decrypt_secret(factor.secret_ref, self._settings.mfa_secret_encryption_key.get_secret_value())
+        encrypted_secret = self._pending_secret_ref_to_encrypted_secret(factor.secret_ref)
+        secret = decrypt_secret(encrypted_secret, self._settings.mfa_secret_encryption_key.get_secret_value())
         if not verify_totp_code(
             secret=secret,
             code=code,
@@ -216,7 +230,7 @@ class PlatformAdminIdentityService:
         recovery_codes = generate_recovery_codes(
             self._settings.mfa_recovery_code_count, self._settings.mfa_recovery_code_length
         )
-        self._repository.enable_mfa_factor(factor.id)
+        self._repository.enable_mfa_factor(factor.id, encrypted_secret)
         self._repository.replace_recovery_codes(
             user.id,
             [token_hmac(code, self._settings.mfa_challenge_secret.get_secret_value()) for code in recovery_codes],
@@ -238,6 +252,7 @@ class PlatformAdminIdentityService:
         user = self._repository.get_platform_user_by_id(user_id)
         if user is None:
             raise AuthenticationError("Invalid MFA challenge", safe_detail="Invalid MFA challenge")
+        self._ensure_user_can_authenticate(user)
         factor = self._repository.get_primary_totp_factor(user_id)
         verified = False
         if factor is not None and factor.secret_ref is not None:
@@ -262,9 +277,13 @@ class PlatformAdminIdentityService:
         tokens = self._issue_session_tokens(user, metadata, mfa_verified=True)
         self._repository.update_last_login(user.id)
         self._write_audit(user.id, "platform_admin.login_success", "platform_user", metadata, {"mfa_verified": True})
-        return LoginResponse(status="authenticated", tokens=tokens)
+        return LoginResponse(status="authenticated", tokens=tokens, mfa_required=False)
 
-    def regenerate_recovery_codes(self, *, user: PlatformUserRecord, metadata: RequestMetadata) -> list[str]:
+    def regenerate_recovery_codes(self, *, user: PlatformUserRecord, password: str, metadata: RequestMetadata) -> list[str]:
+        if not verify_password(password, user.password_hash):
+            raise AuthenticationError("Invalid credentials", safe_detail="Invalid credentials")
+        if self._repository.get_primary_totp_factor(user.id) is None:
+            raise ConflictError("MFA is not enabled", safe_detail="MFA is not enabled for this account.")
         codes = generate_recovery_codes(self._settings.mfa_recovery_code_count, self._settings.mfa_recovery_code_length)
         self._repository.replace_recovery_codes(
             user.id, [token_hmac(code, self._settings.mfa_challenge_secret.get_secret_value()) for code in codes]
@@ -275,6 +294,8 @@ class PlatformAdminIdentityService:
     def disable_mfa(self, *, user: PlatformUserRecord, password: str, metadata: RequestMetadata) -> MessageResponse:
         if not verify_password(password, user.password_hash):
             raise AuthenticationError("Invalid credentials", safe_detail="Invalid credentials")
+        if self._repository.get_primary_totp_factor(user.id) is None:
+            raise ConflictError("MFA is not enabled", safe_detail="MFA is not enabled for this account.")
         self._repository.disable_mfa(user.id)
         self._email_sender.send(mfa_disabled_email(user.email))
         self._write_audit(user.id, "platform_admin.mfa_disabled", "platform_user", metadata)
@@ -380,6 +401,17 @@ class PlatformAdminIdentityService:
             ),
             self._settings.mfa_challenge_secret.get_secret_value(),
         )
+
+    def _available_mfa_methods(self, platform_user_id: UUID) -> list[str]:
+        methods = ["totp"]
+        if self._repository.count_active_recovery_codes(platform_user_id) > 0:
+            methods.append("recovery_code")
+        return methods
+
+    def _pending_secret_ref_to_encrypted_secret(self, secret_ref: str) -> str:
+        if not secret_ref.startswith(PENDING_TOTP_SECRET_PREFIX):
+            raise ConflictError("No pending MFA setup", safe_detail="No pending MFA setup")
+        return secret_ref.removeprefix(PENDING_TOTP_SECRET_PREFIX)
 
     def _write_audit(
         self,

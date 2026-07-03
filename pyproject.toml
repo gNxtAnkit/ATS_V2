@@ -31,6 +31,7 @@ dev = [
 where = [
   "apps/api-gateway/src",
   "services/identity/src",
+  "services/platform-admin/src",
   "packages/backend-common/src",
   "packages/contracts/src",
   "packages/testing/src",
@@ -42,6 +43,7 @@ testpaths = ["tests"]
 pythonpath = [
   "apps/api-gateway/src",
   "services/identity/src",
+  "services/platform-admin/src",
   "packages/backend-common/src",
   "packages/contracts/src",
   "packages/testing/src",
@@ -54,6 +56,7 @@ line-length = 100
 src = [
   "apps/api-gateway/src",
   "services/identity/src",
+  "services/platform-admin/src",
   "packages/backend-common/src",
   "packages/contracts/src",
   "packages/testing/src",
@@ -79,6 +82,8 @@ python_version = "3.12"
 strict = true
 mypy_path = [
   "apps/api-gateway/src",
+  "services/identity/src",
+  "services/platform-admin/src",
   "packages/backend-common/src",
   "packages/contracts/src",
   "packages/testing/src",
@@ -86,6 +91,7 @@ mypy_path = [
 packages = [
   "gnxthire_api_gateway",
   "gnxthire_identity",
+  "gnxthire_platform_admin",
   "gnxthire_common",
   "gnxthire_contracts",
   "gnxthire_testing",

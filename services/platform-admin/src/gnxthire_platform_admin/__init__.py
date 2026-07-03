@@ -1,0 +1,2 @@
+"""Platform Admin Service package."""
+

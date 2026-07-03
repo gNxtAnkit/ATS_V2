@@ -21,6 +21,7 @@ from gnxthire_identity.schemas import (
     MessageResponse,
     PasswordPolicyResponse,
     RecoveryCodesResponse,
+    RegenerateRecoveryCodesRequest,
     RefreshRequest,
     TokenPair,
     TotpConfirmRequest,
@@ -97,6 +98,7 @@ def logout(
 def me(authenticated=Depends(require_tenant_user)) -> MeResponse:
     user, repository, _settings = authenticated
     mfa_factor = repository.get_primary_totp_factor(user.tenant_id, user.id)
+    recovery_codes_remaining = repository.count_active_recovery_codes(user.tenant_id, user.id) if mfa_factor else 0
     return MeResponse(
         actor_id=user.id,
         actor_type="tenant_user",
@@ -105,6 +107,9 @@ def me(authenticated=Depends(require_tenant_user)) -> MeResponse:
         display_name=user.display_name,
         email_verified=user.email_verified_at is not None,
         mfa_enabled=mfa_factor is not None,
+        mfa_methods=["totp"] if mfa_factor is not None else [],
+        pending_mfa_setup=repository.get_pending_totp_factor(user.tenant_id, user.id) is not None,
+        recovery_codes_remaining=recovery_codes_remaining,
     )
 
 
@@ -216,12 +221,15 @@ def mfa_recovery_code_verify(
 
 @router.post("/mfa/recovery-codes/regenerate", response_model=RecoveryCodesResponse)
 def recovery_codes_regenerate(
+    payload: RegenerateRecoveryCodesRequest,
     metadata: RequestMetadata = Depends(request_metadata),
     authenticated=Depends(require_tenant_user),
 ) -> RecoveryCodesResponse:
     user, repository, settings = authenticated
     service = _service_from_authenticated(repository, settings)
-    return RecoveryCodesResponse(recovery_codes=service.regenerate_recovery_codes(user=user, metadata=metadata))
+    return RecoveryCodesResponse(
+        recovery_codes=service.regenerate_recovery_codes(user=user, password=payload.password, metadata=metadata)
+    )
 
 
 @router.post("/mfa/disable", response_model=MessageResponse)

@@ -8,6 +8,8 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+PENDING_TOTP_SECRET_PREFIX = "pending:"
+
 
 @dataclass(frozen=True)
 class PlatformUserRecord:
@@ -362,7 +364,13 @@ class PlatformAdminRepository:
     def create_pending_totp_factor(self, platform_user_id: UUID, encrypted_secret: str) -> None:
         self._session.execute(
             text(
-                "UPDATE platform.platform_user_mfa_factors SET disabled_at = COALESCE(disabled_at, now()) WHERE platform_user_id = :id AND method = 'totp'"
+                """
+                UPDATE platform.platform_user_mfa_factors
+                SET disabled_at = COALESCE(disabled_at, now())
+                WHERE platform_user_id = :id
+                  AND method = 'totp'
+                  AND secret_ref LIKE 'pending:%'
+                """
             ),
             {"id": platform_user_id},
         )
@@ -373,7 +381,7 @@ class PlatformAdminRepository:
                 VALUES (:platform_user_id, 'totp', :secret_ref, true, now())
                 """
             ),
-            {"platform_user_id": platform_user_id, "secret_ref": encrypted_secret},
+            {"platform_user_id": platform_user_id, "secret_ref": f"{PENDING_TOTP_SECRET_PREFIX}{encrypted_secret}"},
         )
 
     def get_pending_totp_factor(self, platform_user_id: UUID) -> PlatformMfaFactorRecord | None:
@@ -384,6 +392,7 @@ class PlatformAdminRepository:
                 FROM platform.platform_user_mfa_factors
                 WHERE platform_user_id = :platform_user_id
                   AND method = 'totp' AND is_primary AND disabled_at IS NOT NULL
+                  AND secret_ref LIKE 'pending:%'
                 ORDER BY created_at DESC
                 LIMIT 1
                 """
@@ -392,10 +401,16 @@ class PlatformAdminRepository:
         ).mappings().one_or_none()
         return PlatformMfaFactorRecord(**row) if row else None
 
-    def enable_mfa_factor(self, factor_id: UUID) -> None:
+    def enable_mfa_factor(self, factor_id: UUID, encrypted_secret: str) -> None:
         self._session.execute(
-            text("UPDATE platform.platform_user_mfa_factors SET disabled_at = NULL WHERE id = :factor_id"),
-            {"factor_id": factor_id},
+            text(
+                """
+                UPDATE platform.platform_user_mfa_factors
+                SET disabled_at = NULL, secret_ref = :secret_ref
+                WHERE id = :factor_id
+                """
+            ),
+            {"factor_id": factor_id, "secret_ref": encrypted_secret},
         )
 
     def replace_recovery_codes(self, platform_user_id: UUID, code_hashes: list[str]) -> None:
@@ -430,6 +445,21 @@ class PlatformAdminRepository:
             {"platform_user_id": platform_user_id, "code_hash": code_hash},
         ).one_or_none()
         return row is not None
+
+    def count_active_recovery_codes(self, platform_user_id: UUID) -> int:
+        row = self._session.execute(
+            text(
+                """
+                SELECT count(*) AS remaining
+                FROM platform.platform_user_mfa_factors
+                WHERE platform_user_id = :platform_user_id
+                  AND method = 'recovery_code'
+                  AND disabled_at IS NULL
+                """
+            ),
+            {"platform_user_id": platform_user_id},
+        ).mappings().one()
+        return row["remaining"]
 
     def disable_mfa(self, platform_user_id: UUID) -> None:
         self._session.execute(

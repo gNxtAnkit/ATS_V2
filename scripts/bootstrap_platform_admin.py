@@ -60,17 +60,19 @@ def main() -> None:
         ).one_or_none()
         if existing is None:
             display_name = args.display_name or email.split("@", 1)[0]
-            connection.execute(
+            platform_user_id = connection.execute(
                 text(
                     """
                     INSERT INTO platform.platform_users (email, display_name, status, password_hash, email_verified_at)
                     VALUES (:email, :display_name, 'active', :password_hash, now())
+                    RETURNING id
                     """
                 ),
                 {"email": email, "display_name": display_name, "password_hash": password_hash},
-            )
+            ).scalar_one()
             print(f"Created platform admin {email} with status=active")
         else:
+            platform_user_id = existing.id
             connection.execute(
                 text(
                     """
@@ -82,6 +84,18 @@ def main() -> None:
                 {"password_hash": password_hash, "id": existing.id},
             )
             print(f"Updated password for existing platform admin {email}")
+        connection.execute(
+            text(
+                """
+                INSERT INTO platform.platform_user_roles(platform_user_id, role_id)
+                SELECT :platform_user_id, id
+                FROM platform.platform_roles
+                WHERE role_key = 'super_admin'
+                ON CONFLICT DO NOTHING
+                """
+            ),
+            {"platform_user_id": platform_user_id},
+        )
 
 
 if __name__ == "__main__":

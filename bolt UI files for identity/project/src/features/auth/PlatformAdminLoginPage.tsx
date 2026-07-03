@@ -31,8 +31,15 @@ export function PlatformAdminLoginPage() {
       const response = await identityApi.login('platform', email, password);
       const redirectTo = searchParams.get('redirect') || '/platform-admin/dashboard';
 
-      if (response.status === 'mfa_required' && response.mfa_challenge_token) {
-        storeMfaChallenge({ realm: 'platform', challengeToken: response.mfa_challenge_token, redirectTo });
+      const challengeToken = response.challenge_token ?? response.mfa_challenge_token;
+      if ((response.mfa_required || response.status === 'mfa_required') && challengeToken) {
+        storeMfaChallenge({
+          realm: 'platform',
+          challengeToken,
+          redirectTo,
+          availableMethods: response.available_methods ?? ['totp'],
+          expiresAt: Date.now() + (response.expires_in_seconds ?? 300) * 1000,
+        });
         navigate('/auth/mfa/verify');
         return;
       }

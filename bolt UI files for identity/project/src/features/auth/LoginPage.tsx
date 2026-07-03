@@ -32,8 +32,15 @@ export function LoginPage() {
       const response = await identityApi.login('tenant', email, password);
       const redirectTo = searchParams.get('redirect') || '/dashboard';
 
-      if (response.status === 'mfa_required' && response.mfa_challenge_token) {
-        storeMfaChallenge({ realm: 'tenant', challengeToken: response.mfa_challenge_token, redirectTo });
+      const challengeToken = response.challenge_token ?? response.mfa_challenge_token;
+      if ((response.mfa_required || response.status === 'mfa_required') && challengeToken) {
+        storeMfaChallenge({
+          realm: 'tenant',
+          challengeToken,
+          redirectTo,
+          availableMethods: response.available_methods ?? ['totp'],
+          expiresAt: Date.now() + (response.expires_in_seconds ?? 300) * 1000,
+        });
         navigate('/auth/mfa/verify');
         return;
       }
