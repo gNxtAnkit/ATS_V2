@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { toneForStatus } from '../../theme';
 
 export function StatusBadge({ status }: { status: string | null | undefined }) {
@@ -14,7 +15,7 @@ export function StatusBadge({ status }: { status: string | null | undefined }) {
   );
 }
 
-export function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'brand' }) {
+export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'brand' }) {
   return (
     <span
       className={[

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, ComponentType } from 'react';
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={['bg-white rounded-2xl border border-slate-200 shadow-card', className].join(' ')}>{children}</div>;
@@ -10,7 +10,7 @@ export function CardHeader({
   subtitle,
   action,
 }: {
-  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  icon?: ComponentType<{ size?: number; className?: string }>;
   title: string;
   subtitle?: string;
   action?: ReactNode;
