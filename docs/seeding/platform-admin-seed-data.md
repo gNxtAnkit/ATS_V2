@@ -20,15 +20,18 @@ The seed is idempotent and re-runnable. It uses the real Identity password hashi
 
 ## Seeded Credentials
 
-Local/test password for all seeded users:
+The full-rights super admin is controlled by `.env`:
 
 ```text
-LocalTest@12345
+PLATFORM_ADMIN_SEED_EMAIL=ankit@gnxtsystems.com
+PLATFORM_ADMIN_SEED_PASSWORD=LocalTest@12345
 ```
+
+If these variables are not set, the seed uses those same defaults.
 
 Platform admins:
 
-- `super.admin@local.gnxthire.test`
+- `PLATFORM_ADMIN_SEED_EMAIL` value from `.env` (`super_admin`)
 - `support.admin@local.gnxthire.test`
 - `billing.admin@local.gnxthire.test`
 - `security.admin@local.gnxthire.test`

@@ -41,7 +41,8 @@ make db-upgrade
 make seed-platform-admin
 ```
 
-Seeded local users use `LocalTest@12345`; see `docs/seeding/platform-admin-seed-data.md`.
+Seeded local credentials come from `PLATFORM_ADMIN_SEED_EMAIL` and
+`PLATFORM_ADMIN_SEED_PASSWORD`; see `docs/seeding/platform-admin-seed-data.md`.
 
 ## API smoke coverage
 

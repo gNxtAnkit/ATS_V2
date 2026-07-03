@@ -29,7 +29,7 @@ make smoke-platform-admin-api
 
 The smoke script:
 
-- logs in through Identity as `super.admin@local.gnxthire.test`
+- logs in through Identity as the `PLATFORM_ADMIN_SEED_EMAIL` user
 - logs in as `auditor@local.gnxthire.test`
 - logs in as a tenant user and verifies Platform Admin APIs reject that token
 - verifies unauthenticated access fails

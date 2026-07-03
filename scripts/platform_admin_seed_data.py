@@ -5,6 +5,8 @@ from decimal import Decimal
 from pathlib import Path
 import sys
 
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
@@ -18,8 +20,27 @@ from gnxthire_identity.config import get_identity_settings
 from gnxthire_identity.security import hash_password, validate_password_policy
 
 
-LOCAL_PASSWORD = "LocalTest@12345"
+DEFAULT_PLATFORM_ADMIN_SEED_EMAIL = "ankit@gnxtsystems.com"
+DEFAULT_PLATFORM_ADMIN_SEED_PASSWORD = "LocalTest@12345"
 SEED_EMAIL_DOMAIN = "local.gnxthire.test"
+
+
+class PlatformAdminSeedSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    email: str = Field(
+        default=DEFAULT_PLATFORM_ADMIN_SEED_EMAIL,
+        validation_alias="PLATFORM_ADMIN_SEED_EMAIL",
+    )
+    password: str = Field(
+        default=DEFAULT_PLATFORM_ADMIN_SEED_PASSWORD,
+        validation_alias=AliasChoices("PLATFORM_ADMIN_SEED_PASSWORD", "PLATFORM_ADMIN_LOCAL_PASSWORD"),
+    )
+
+
+SEED_SETTINGS = PlatformAdminSeedSettings()
+PLATFORM_ADMIN_SEED_EMAIL = SEED_SETTINGS.email.strip().lower()
+PLATFORM_ADMIN_SEED_PASSWORD = SEED_SETTINGS.password
 
 
 @dataclass(frozen=True)
@@ -30,7 +51,7 @@ class SeedUser:
 
 
 USERS = [
-    SeedUser("super.admin@local.gnxthire.test", "Super Admin", "super_admin"),
+    SeedUser(PLATFORM_ADMIN_SEED_EMAIL, "Super Admin", "super_admin"),
     SeedUser("support.admin@local.gnxthire.test", "Support Admin", "support_admin"),
     SeedUser("billing.admin@local.gnxthire.test", "Billing Plan Admin", "billing_plan_admin"),
     SeedUser("security.admin@local.gnxthire.test", "Security Admin", "security_admin"),
@@ -200,10 +221,10 @@ def seed_access_control(connection: Connection) -> dict[str, object]:
 
 def seed_platform_users(connection: Connection, role_ids: dict[str, object]) -> dict[str, object]:
     identity_settings = get_identity_settings()
-    password_hash = hash_password(LOCAL_PASSWORD)
+    password_hash = hash_password(PLATFORM_ADMIN_SEED_PASSWORD)
     user_ids: dict[str, object] = {}
     for user in USERS:
-        validate_password_policy(LOCAL_PASSWORD, user.email, identity_settings)
+        validate_password_policy(PLATFORM_ADMIN_SEED_PASSWORD, user.email, identity_settings)
         user_id = execute_scalar(
             connection,
             """
@@ -576,7 +597,7 @@ def seed_tenants(connection: Connection, ids: dict[str, dict[str, object]], user
             {"tenant_id": tenant_ids[tenant_key], "domain": domain, "is_primary": is_primary, "status": status},
         )
 
-    tenant_password_hash = hash_password(LOCAL_PASSWORD)
+    tenant_password_hash = hash_password(PLATFORM_ADMIN_SEED_PASSWORD)
     connection.execute(
         text(
             """
@@ -602,7 +623,7 @@ def seed_remaining_modules(
     tenant_ids: dict[str, object],
     user_ids: dict[str, object],
 ) -> None:
-    actor_id = user_ids["super.admin@local.gnxthire.test"]
+    actor_id = user_ids[PLATFORM_ADMIN_SEED_EMAIL]
     active_tenant_id = tenant_ids["active"]
     trial_tenant_id = tenant_ids["trial"]
 
@@ -1017,7 +1038,7 @@ def seed() -> None:
         seed_remaining_modules(connection, ids, tenant_ids, user_ids)
 
     print("Seeded Platform Admin local/test data.")
-    print(f"Local password: {LOCAL_PASSWORD}")
+    print(f"Local password: {PLATFORM_ADMIN_SEED_PASSWORD}")
     for user in USERS:
         print(f"- {user.email} ({user.role_key})")
     print("- tenant.admin@local.gnxthire.test (tenant-user rejection smoke)")

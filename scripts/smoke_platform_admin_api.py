@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -24,10 +26,27 @@ from gnxthire_common.db import create_sync_engine
 
 IDENTITY_BASE_URL = os.getenv("IDENTITY_API_BASE_URL", "http://localhost:8001").rstrip("/")
 PLATFORM_ADMIN_BASE_URL = os.getenv("PLATFORM_ADMIN_API_BASE_URL", "http://localhost:8002").rstrip("/")
-LOCAL_PASSWORD = os.getenv("PLATFORM_ADMIN_LOCAL_PASSWORD", "LocalTest@12345")
 SMOKE_MODE = os.getenv("PLATFORM_ADMIN_SMOKE_MODE", "http")
 _IDENTITY_CLIENT: Any = None
 _PLATFORM_CLIENT: Any = None
+
+
+class PlatformAdminSmokeSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    super_admin_email: str = Field(
+        default="ankit@gnxtsystems.com",
+        validation_alias="PLATFORM_ADMIN_SEED_EMAIL",
+    )
+    seed_password: str = Field(
+        default="LocalTest@12345",
+        validation_alias=AliasChoices("PLATFORM_ADMIN_SEED_PASSWORD", "PLATFORM_ADMIN_LOCAL_PASSWORD"),
+    )
+
+
+SMOKE_SETTINGS = PlatformAdminSmokeSettings()
+SUPER_ADMIN_EMAIL = SMOKE_SETTINGS.super_admin_email.strip().lower()
+LOCAL_PASSWORD = SMOKE_SETTINGS.seed_password
 
 
 @dataclass(frozen=True)
@@ -295,7 +314,7 @@ def route_catalog(token: str) -> list[tuple[str, str]]:
 
 def run_smoke() -> list[SmokeResult]:
     ids = load_seed_ids()
-    super_token = login_platform_admin("super.admin@local.gnxthire.test")
+    super_token = login_platform_admin(SUPER_ADMIN_EMAIL)
     auditor_token = login_platform_admin("auditor@local.gnxthire.test")
     tenant_token = login_tenant_user()
     suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
