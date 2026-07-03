@@ -47,6 +47,7 @@ class TenantCreateRequest(BaseModel):
     region: str = "US"
     data_residency_zone: str | None = Field(default=None, max_length=100)
     infra_pool_id: UUID | None = None
+    employee_count: int | None = Field(default=None, ge=0)
     idempotency_key: str = Field(min_length=16, max_length=255)
 
 
@@ -60,7 +61,32 @@ class TenantUpdateRequest(BaseModel):
     region: str | None = None
     data_residency_zone: str | None = Field(default=None, max_length=100)
     infra_pool_id: UUID | None = None
+    employee_count: int | None = Field(default=None, ge=0)
     lock_version: int | None = Field(default=None, ge=0)
+
+
+class TenantAddressCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address_line1: str = Field(min_length=1, max_length=300)
+    address_line2: str | None = Field(default=None, max_length=300)
+    city: str = Field(min_length=1, max_length=150)
+    state: str = Field(min_length=1, max_length=150)
+    postal_code: str = Field(min_length=1, max_length=30)
+    country: str = Field(min_length=1, max_length=100)
+    website_url: str = Field(min_length=1, max_length=500)
+
+
+class TenantAddressUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address_line1: str | None = Field(default=None, min_length=1, max_length=300)
+    address_line2: str | None = Field(default=None, max_length=300)
+    city: str | None = Field(default=None, min_length=1, max_length=150)
+    state: str | None = Field(default=None, min_length=1, max_length=150)
+    postal_code: str | None = Field(default=None, min_length=1, max_length=30)
+    country: str | None = Field(default=None, min_length=1, max_length=100)
+    website_url: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 class TenantDomainCreateRequest(BaseModel):

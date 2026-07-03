@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShieldCheck, UsersRound, LogOut } from 'lucide-react';
+import { LayoutDashboard, Network, ShieldCheck, UsersRound, LogOut } from 'lucide-react';
 import { PLATFORM_MODULES } from '../../features/modules/moduleConfig';
 import { useAuth } from '../../lib/auth/AuthProvider';
 
 const topLinks = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/tenants', label: 'Tenants', icon: Network, end: false },
   { to: '/platform-users', label: 'Platform Users', icon: UsersRound, end: false },
   { to: '/security', label: 'Security', icon: ShieldCheck, end: false },
 ];

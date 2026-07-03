@@ -323,12 +323,16 @@ class PlatformTenants(TimestampMixin, SoftDeleteMixin, LockVersionMixin, Base):
     region: Mapped[str] = mapped_column(RegionEnum, nullable=False, server_default=text("'US'"))
     data_residency_zone: Mapped[str | None] = mapped_column(Text())
     infra_pool_id: Mapped[uuid.UUID | None] = mapped_column(postgresql.UUID(as_uuid=True))
+    employee_count: Mapped[int | None] = mapped_column(Integer())
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     churned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     rel_fk_tenants_plan: Mapped["PlatformPlans"] = relationship("PlatformPlans", viewonly=True, foreign_keys="[PlatformTenants.plan_id]")
     rel_fk_tenants_infra_pool: Mapped["PlatformInfraPools"] = relationship("PlatformInfraPools", viewonly=True, foreign_keys="[PlatformTenants.infra_pool_id]")
+    addresses: Mapped[list["PlatformTenantAddresses"]] = relationship(
+        "PlatformTenantAddresses", viewonly=True, foreign_keys="[PlatformTenantAddresses.tenant_id]"
+    )
 
 
 class PlatformTenantDomains(CreatedAtMixin, Base):
@@ -349,6 +353,28 @@ class PlatformTenantDomains(CreatedAtMixin, Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     rel_fk_tenant_domains_tenant: Mapped["PlatformTenants"] = relationship("PlatformTenants", viewonly=True, foreign_keys="[PlatformTenantDomains.tenant_id]")
+
+
+class PlatformTenantAddresses(TimestampMixin, Base):
+    __tablename__ = "tenant_addresses"
+    __table_args__ = (
+        ForeignKeyConstraint(['tenant_id'], ['platform.tenants.id'], name='fk_tenant_addresses_tenant'),
+        {"schema": "platform"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()'))
+    tenant_id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), nullable=False)
+    address_line1: Mapped[str] = mapped_column(Text(), nullable=False)
+    address_line2: Mapped[str | None] = mapped_column(Text())
+    city: Mapped[str] = mapped_column(Text(), nullable=False)
+    state: Mapped[str] = mapped_column(Text(), nullable=False)
+    postal_code: Mapped[str] = mapped_column(Text(), nullable=False)
+    country: Mapped[str] = mapped_column(Text(), nullable=False)
+    website_url: Mapped[str] = mapped_column(Text(), nullable=False)
+
+    rel_fk_tenant_addresses_tenant: Mapped["PlatformTenants"] = relationship(
+        "PlatformTenants", viewonly=True, foreign_keys="[PlatformTenantAddresses.tenant_id]"
+    )
 
 
 class PlatformTenantLifecycleEvents(Base):

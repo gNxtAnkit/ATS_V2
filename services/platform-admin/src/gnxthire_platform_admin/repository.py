@@ -63,16 +63,25 @@ class PlatformAdminRepository:
         filters: Mapping[str, Any] | None = None,
         search_columns: Sequence[str] = (),
         search: str | None = None,
+        search_extra_sql: str | None = None,
         order_column: str = "created_at",
     ) -> tuple[list[dict[str, Any]], str | None, bool]:
+        """search_extra_sql is an optional additional OR-ed raw SQL predicate (e.g. an
+        EXISTS subquery reaching into a related table) for callers whose search needs to
+        cover a column that isn't on `table` itself — see list_tenants' domain search.
+        It must be caller-supplied literal SQL (never built from user input) and may
+        reference the bound :search parameter; this mirrors the trust model already used
+        for `table`/`search_columns` throughout this repository."""
         params: dict[str, Any] = {"limit": limit + 1}
         conditions: list[str] = []
         for key, value in (filters or {}).items():
             if value is not None:
                 conditions.append(f"{key} = :{key}")
                 params[key] = value
-        if search and search_columns:
+        if search and (search_columns or search_extra_sql):
             search_conditions = [f"{column}::text ILIKE :search" for column in search_columns]
+            if search_extra_sql:
+                search_conditions.append(search_extra_sql)
             conditions.append("(" + " OR ".join(search_conditions) + ")")
             params["search"] = f"%{search}%"
         if cursor:

@@ -1,5 +1,4 @@
 import {
-  Network,
   RefreshCw,
   ReceiptText,
   SlidersHorizontal,
@@ -43,35 +42,10 @@ export function idPath(basePath: string, id: unknown, suffix?: string): string |
 // services/platform-admin/src/gnxthire_platform_admin/routes.py for the
 // backing routes and services/platform-admin/.../routes.py `_route_permission`
 // for the exact permission keys enforced server-side.
+// 'tenants' is intentionally not listed here — it now has a dedicated, purpose-built
+// screen at /tenants (see features/tenants/TenantManagementPage.tsx) instead of the
+// generic auto-rendered table this config drives for the other modules.
 export const PLATFORM_MODULES: PlatformModuleConfig[] = [
-  {
-    slug: 'tenants',
-    title: 'Tenants',
-    description: 'Search tenants, inspect lifecycle state, domains, provisioning, entitlements, and support context.',
-    icon: Network,
-    readPermission: 'platform.tenant.read',
-    listPath: '/v1/platform-admin/tenants',
-    detailPath: (record) => idPath('/v1/platform-admin/tenants', record.id),
-    actions: [
-      {
-        label: 'Suspend',
-        permission: 'platform.tenant.lifecycle.manage',
-        method: 'POST',
-        path: (record) => idPath('/v1/platform-admin/tenants', record?.id, 'suspend'),
-        body: () => ({ reason: 'Suspended from Platform Admin Portal' }),
-        confirm: 'Suspend this tenant? They will lose access until reactivated.',
-        destructive: true,
-      },
-      {
-        label: 'Reactivate',
-        permission: 'platform.tenant.lifecycle.manage',
-        method: 'POST',
-        path: (record) => idPath('/v1/platform-admin/tenants', record?.id, 'reactivate'),
-        body: () => ({ reason: 'Reactivated from Platform Admin Portal' }),
-        confirm: 'Reactivate this tenant?',
-      },
-    ],
-  },
   {
     slug: 'provisioning',
     title: 'Provisioning',
