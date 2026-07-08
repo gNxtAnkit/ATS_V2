@@ -10,6 +10,8 @@ import { OverviewPage } from './features/dashboard/OverviewPage';
 import { SecurityPage } from './features/security/SecurityPage';
 import { PlatformUsersPage } from './features/users/PlatformUsersPage';
 import { ModulePage } from './features/modules/ModulePage';
+import { TenantManagementPage } from './features/tenants/TenantManagementPage';
+import { TenantDetailPage } from './features/tenants/TenantDetailPage';
 
 export default function App() {
   return (
@@ -59,6 +61,22 @@ export default function App() {
             element={
               <RequireAuth>
                 <PlatformUsersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/tenants"
+            element={
+              <RequireAuth>
+                <TenantManagementPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/tenants/:tenantId"
+            element={
+              <RequireAuth>
+                <TenantDetailPage />
               </RequireAuth>
             }
           />

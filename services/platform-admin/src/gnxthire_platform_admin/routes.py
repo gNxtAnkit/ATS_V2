@@ -64,6 +64,8 @@ from gnxthire_platform_admin.schemas import (
     SupportSessionCreateRequest,
     SupportTicketCreateRequest,
     SupportTicketUpdateRequest,
+    TenantAddressCreateRequest,
+    TenantAddressUpdateRequest,
     TenantCreateRequest,
     TenantDomainCreateRequest,
     TenantDomainUpdateRequest,
@@ -250,7 +252,11 @@ def list_tenants(
             "isolation_tier": isolation_tier,
             "infra_pool_id": infra_pool_id,
         },
-        search_columns=("name", "primary_admin_email", "legal_entity_name"),
+        search_columns=("name", "primary_admin_email", "legal_entity_name", "id"),
+        search_extra_sql=(
+            "EXISTS (SELECT 1 FROM platform.tenant_domains td "
+            "WHERE td.tenant_id = platform.tenants.id AND td.domain ILIKE :search)"
+        ),
         search=search,
     )
     return _list(rows, limit=limit, next_cursor=next_cursor, has_more=has_more, metadata=metadata)
@@ -273,11 +279,11 @@ def create_tenant(
         """
         INSERT INTO platform.tenants (
           name, legal_entity_name, tenant_type, primary_admin_email, plan_id,
-          status, isolation_tier, region, data_residency_zone, infra_pool_id
+          status, isolation_tier, region, data_residency_zone, infra_pool_id, employee_count
         )
         VALUES (
           :name, :legal_entity_name, :tenant_type, :primary_admin_email, :plan_id,
-          'provisioning', :isolation_tier, :region, :data_residency_zone, :infra_pool_id
+          'provisioning', :isolation_tier, :region, :data_residency_zone, :infra_pool_id, :employee_count
         )
         RETURNING *
         """,
@@ -662,6 +668,148 @@ def delete_tenant_domain(tenant_id: UUID, domain_id: UUID, metadata: RequestMeta
     after = repository.execute_returning_one("UPDATE platform.tenant_domains SET verification_status = 'revoked' WHERE id = :id RETURNING *", {"id": domain_id})
     _audit(repository, actor, metadata, action_key="platform.tenant_domain.deleted", object_table="tenant_domains", object_id=domain_id, tenant_id=tenant_id, before_state=before, after_state=after)
     return _single(after, metadata)
+
+
+def _require_tenant_address(
+    repository: PlatformAdminRepository, tenant_id: UUID, address_id: UUID
+) -> dict[str, Any]:
+    address = repository.one(
+        "SELECT * FROM platform.tenant_addresses WHERE id = :id AND tenant_id = :tenant_id",
+        {"id": address_id, "tenant_id": tenant_id},
+    )
+    if address is None:
+        raise NotFoundError("Address not found", safe_detail="Address not found")
+    return address
+
+
+@router.get("/tenants/{tenant_id}/addresses", response_model=ListEnvelope)
+def list_tenant_addresses(
+    tenant_id: UUID,
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = None,
+    metadata: RequestMetadata = Depends(request_metadata),
+    session: Session = Depends(session_dependency),
+    actor: PlatformAdminActorContext = Depends(require_platform_permission("platform.tenant.read")),
+) -> ListEnvelope:
+    repository = _repo(session)
+    _require_tenant(repository, tenant_id)
+    rows, next_cursor, has_more = repository.list_page(
+        table="platform.tenant_addresses",
+        limit=limit,
+        cursor=cursor,
+        filters={"tenant_id": tenant_id},
+    )
+    return _list(rows, limit=limit, next_cursor=next_cursor, has_more=has_more, metadata=metadata)
+
+
+@router.post("/tenants/{tenant_id}/addresses", response_model=Envelope)
+def add_tenant_address(
+    tenant_id: UUID,
+    payload: TenantAddressCreateRequest,
+    metadata: RequestMetadata = Depends(request_metadata),
+    session: Session = Depends(session_dependency),
+    actor: PlatformAdminActorContext = Depends(
+        require_platform_permission("platform.tenant.address.manage")
+    ),
+) -> Envelope:
+    repository = _repo(session)
+    _require_tenant(repository, tenant_id)
+    address = repository.execute_returning_one(
+        """
+        INSERT INTO platform.tenant_addresses (
+          tenant_id, address_line1, address_line2, city, state, postal_code, country, website_url
+        )
+        VALUES (
+          :tenant_id, :address_line1, :address_line2, :city,
+          :state, :postal_code, :country, :website_url
+        )
+        RETURNING *
+        """,
+        {"tenant_id": tenant_id, **payload.model_dump()},
+    )
+    _audit(
+        repository,
+        actor,
+        metadata,
+        action_key="platform.tenant_address.added",
+        object_table="tenant_addresses",
+        object_id=address["id"],
+        tenant_id=tenant_id,
+        after_state=address,
+    )
+    return _single(address, metadata)
+
+
+@router.get("/tenants/{tenant_id}/addresses/{address_id}", response_model=Envelope)
+def get_tenant_address(
+    tenant_id: UUID,
+    address_id: UUID,
+    metadata: RequestMetadata = Depends(request_metadata),
+    session: Session = Depends(session_dependency),
+    actor: PlatformAdminActorContext = Depends(
+        require_platform_permission("platform.tenant.read")
+    ),
+) -> Envelope:
+    repository = _repo(session)
+    return _single(_require_tenant_address(repository, tenant_id, address_id), metadata)
+
+
+@router.patch("/tenants/{tenant_id}/addresses/{address_id}", response_model=Envelope)
+def update_tenant_address(
+    tenant_id: UUID,
+    address_id: UUID,
+    payload: TenantAddressUpdateRequest,
+    metadata: RequestMetadata = Depends(request_metadata),
+    session: Session = Depends(session_dependency),
+    actor: PlatformAdminActorContext = Depends(
+        require_platform_permission("platform.tenant.address.manage")
+    ),
+) -> Envelope:
+    repository = _repo(session)
+    before = _require_tenant_address(repository, tenant_id, address_id)
+    values = clean_update_payload(payload.model_dump())
+    after = repository.update_by_id(
+        table="platform.tenant_addresses", entity_id=address_id, values=values
+    )
+    _audit(
+        repository,
+        actor,
+        metadata,
+        action_key="platform.tenant_address.updated",
+        object_table="tenant_addresses",
+        object_id=address_id,
+        tenant_id=tenant_id,
+        before_state=before,
+        after_state=after,
+    )
+    return _single(after, metadata)
+
+
+@router.delete("/tenants/{tenant_id}/addresses/{address_id}", response_model=Envelope)
+def delete_tenant_address(
+    tenant_id: UUID,
+    address_id: UUID,
+    metadata: RequestMetadata = Depends(request_metadata),
+    session: Session = Depends(session_dependency),
+    actor: PlatformAdminActorContext = Depends(
+        require_platform_permission("platform.tenant.address.manage")
+    ),
+) -> Envelope:
+    repository = _repo(session)
+    before = _require_tenant_address(repository, tenant_id, address_id)
+    repository.execute("DELETE FROM platform.tenant_addresses WHERE id = :id", {"id": address_id})
+    _audit(
+        repository,
+        actor,
+        metadata,
+        action_key="platform.tenant_address.deleted",
+        object_table="tenant_addresses",
+        object_id=address_id,
+        tenant_id=tenant_id,
+        before_state=before,
+        after_state=None,
+    )
+    return _single(before, metadata)
 
 
 @router.get("/provisioning-jobs", response_model=ListEnvelope)
